@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import matplotlib
+from torch.utils.checkpoint import checkpoint
 
 
 device = torch.device('cpu')
@@ -90,23 +91,12 @@ class GaborModel:
     self._rotations = nn.Parameter(rotations.requires_grad_(True))
 
 
-def render_gabor_image(
-  kernel_size: int, 
-  means: torch.Tensor, 
-  frequencies: torch.Tensor, 
-  colors: torch.Tensor, 
-  colors2: torch.Tensor, 
-  opacities: torch.Tensor, 
-  scales: torch.Tensor, 
-  rotations: torch.Tensor, 
-  device
-) -> torch.Tensor:
-  batch_size = means.shape[0]
+OBJECT_SPACE_RANGE = 10.0
+RENDER_CHUNK_SIZE = 64
 
-  # create object space coordinate grid
-  object_space_range = 10.0
-  start = torch.tensor([-1.0 * object_space_range], device=device).view(-1, 1)
-  end = torch.tensor([1.0 * object_space_range], device=device).view(-1, 1)
+def _build_object_space_grid(kernel_size: int, device):
+  start = torch.tensor([-1.0 * OBJECT_SPACE_RANGE], device=device).view(-1, 1)
+  end = torch.tensor([1.0 * OBJECT_SPACE_RANGE], device=device).view(-1, 1)
 
   base_linspace = torch.linspace(0, 1, steps=kernel_size, device=device)
   ax_batch = start + (end - start) * base_linspace
@@ -118,6 +108,24 @@ def render_gabor_image(
 
   # create gaussian strength grid
   gaussian_strength = torch.exp(-(xx * xx + yy * yy) / 2)
+
+  return xx, yy, gaussian_strength
+
+def _render_primitive_chunk(
+  kernel_size: int, 
+  means: torch.Tensor, 
+  frequencies: torch.Tensor, 
+  colors: torch.Tensor, 
+  colors2: torch.Tensor, 
+  opacities: torch.Tensor, 
+  scales: torch.Tensor, 
+  rotations: torch.Tensor, 
+  xx: torch.Tensor, 
+  yy: torch.Tensor, 
+  gaussian_strength: torch.Tensor, 
+  device
+) -> torch.Tensor:
+  batch_size = means.shape[0]
 
   # reshape frequencies tensor to fit batch grid
   frequencies = frequencies.view(batch_size, 1, 1, 2)
@@ -160,7 +168,45 @@ def render_gabor_image(
   primitives = primitives.permute(0, 2, 3, 1)
   
   # integrate primitive layers
-  image = primitives.sum(dim=0)
+  return primitives.sum(dim=0)
+
+def render_gabor_image(
+  kernel_size: int, 
+  means: torch.Tensor, 
+  frequencies: torch.Tensor, 
+  colors: torch.Tensor, 
+  colors2: torch.Tensor, 
+  opacities: torch.Tensor, 
+  scales: torch.Tensor, 
+  rotations: torch.Tensor, 
+  device
+) -> torch.Tensor:
+  batch_size = means.shape[0]
+
+  xx, yy, gaussian_strength = _build_object_space_grid(kernel_size, device)
+
+  # render primitives in chunks to keep peak GPU memory bounded
+  image = None
+  for start in range(0, batch_size, RENDER_CHUNK_SIZE):
+    end = min(start + RENDER_CHUNK_SIZE, batch_size)
+    chunk_image = checkpoint(
+      _render_primitive_chunk,
+      kernel_size, 
+      means[start:end], 
+      frequencies[start:end], 
+      colors[start:end], 
+      colors2[start:end], 
+      opacities[start:end], 
+      scales[start:end], 
+      rotations[start:end], 
+      xx, 
+      yy, 
+      gaussian_strength, 
+      device, 
+      use_reentrant=False
+    )
+    image = chunk_image if image is None else image + chunk_image
+
   image = torch.clamp(image, min=0.0, max=1.0)
 
   return image
