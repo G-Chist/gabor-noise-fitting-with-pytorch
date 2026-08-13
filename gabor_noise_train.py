@@ -22,7 +22,7 @@ print("device: ", device)
 config
 """
 data_dir = './'
-gt_image_path = os.path.join(data_dir, 'gabor_noise_example.png')
+gt_image_path = os.path.join(data_dir, 'gabor_noise_example_2.png')
 kernel_size = 512
 primitive_num = 500
 learning_rate = 0.01
