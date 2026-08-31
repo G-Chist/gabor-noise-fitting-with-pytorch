@@ -65,6 +65,34 @@ class GaborModel:
     self._scales = nn.Parameter(scales.requires_grad_(True))
     self._rotations = nn.Parameter(rotations.requires_grad_(True))
   
+  def save_weights(self, path: str, kernel_size: int):
+    torch.save({
+      'kernel_size': kernel_size,
+      'means': self._means.data,
+      'colors': self._colors.data,
+      'colors2': self._colors2.data,
+      'frequencies': self._frequencies.data,
+      'opacities': self._opacities.data,
+      'scales': self._scales.data,
+      'rotations': self._rotations.data,
+    }, path)
+    print(f"weights saved to {path}")
+
+  @classmethod
+  def load_weights(cls, path: str):
+    checkpoint = torch.load(path, map_location=device, weights_only=True)
+    model = cls()
+    model._means = nn.Parameter(checkpoint['means'])
+    model._colors = nn.Parameter(checkpoint['colors'])
+    model._colors2 = nn.Parameter(checkpoint['colors2'])
+    model._frequencies = nn.Parameter(checkpoint['frequencies'])
+    model._opacities = nn.Parameter(checkpoint['opacities'])
+    model._scales = nn.Parameter(checkpoint['scales'])
+    model._rotations = nn.Parameter(checkpoint['rotations'])
+    kernel_size = checkpoint['kernel_size']
+    print(f"weights loaded from {path} ({model._means.shape[0]} primitives, kernel_size={kernel_size})")
+    return model, kernel_size
+
   def create_simple_points(self):
     means_array = [[1.0, 1.0], [0.5, -0.5]] # ndc
     scales_array = [[1.0, 1.0], [2.0, 1.0]] # ndc

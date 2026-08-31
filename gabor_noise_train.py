@@ -22,7 +22,7 @@ print("device: ", device)
 config
 """
 data_dir = './'
-gt_image_path = os.path.join(data_dir, 'gabor_noise_example_2.png')
+gt_image_path = os.path.join(data_dir, 'rocks.png')
 kernel_size = 512
 primitive_num = 500
 learning_rate = 0.01
@@ -131,6 +131,9 @@ plt.title('Loss vs. Epochs')
 plt.xlabel('Epoch')
 plt.ylabel('Loss')
 plt.savefig(os.path.join(directory, loss_fname), bbox_inches='tight')
+
+# Saving model weights
+model.save_weights(os.path.join(directory, 'model_weights.pt'), kernel_size=kernel_size)
 
 # Creating randomized color image
 with torch.no_grad():
