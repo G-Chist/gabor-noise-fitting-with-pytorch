@@ -26,7 +26,7 @@ gt_image_path = os.path.join(data_dir, 'rocks.png')
 kernel_size = 512
 primitive_num = 500
 learning_rate = 0.01
-epoch_num = 1000
+epoch_num = 3000
 display_interval = 10
 
 """
